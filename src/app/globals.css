@@ -357,6 +357,37 @@ h1 {
   filter: brightness(1.04);
 }
 
+.game-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background: rgba(10, 14, 25, 0.72);
+  color: var(--muted);
+}
+
+.footer-brand {
+  margin: 0;
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.footer-copy {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
+.footer-copy-right {
+  margin: 0;
+  white-space: nowrap;
+}
+
 .loading-card {
   min-height: 560px;
   padding: 0;
@@ -456,6 +487,11 @@ h1 {
 
   .loading-grid {
     grid-template-columns: 1fr;
+  }
+
+  .game-footer {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

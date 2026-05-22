@@ -21,9 +21,22 @@ type ScryfallCard = {
   }>;
 };
 
-const SCRYFALL_RANDOM_ENDPOINT =
-  "https://api.scryfall.com/cards/random?q=game:paper+has:art+lang:en";
-const FETCH_TIMEOUT_MS = 4500;
+type ScryfallSearchResponse = {
+  data: ScryfallCard[];
+  has_more?: boolean;
+  next_page?: string;
+};
+
+const SCRYFALL_SEARCH_ENDPOINT =
+  "https://api.scryfall.com/cards/search?q=game:paper+has:art+lang:en+unique:art+prefer:oldest&order=name&dir=asc";
+const FETCH_TIMEOUT_MS = 6000;
+const CARD_POOL_SIZE = 400;
+const MAX_POOL_PAGES = 5;
+const RECENT_CARD_LIMIT = 16;
+
+let cardPoolPromise: Promise<CardArtEntry[]> | null = null;
+let cachedCardPool: CardArtEntry[] | null = null;
+let recentCardIds: string[] = [];
 
 function getArtUrl(card: ScryfallCard) {
   const faceImage = card.card_faces?.find((face) => face.image_uris?.art_crop)
@@ -58,52 +71,123 @@ function toCardArtEntry(card: ScryfallCard): CardArtEntry {
   };
 }
 
-async function fetchRandomCard() {
+async function fetchSearchPage(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  const response = await fetch(SCRYFALL_RANDOM_ENDPOINT, {
-    cache: "no-store",
-    signal: controller.signal,
-    headers: {
-      accept: "application/json"
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        accept: "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Scryfall request failed with ${response.status}`);
     }
-  });
 
-  clearTimeout(timeout);
-
-  if (!response.ok) {
-    throw new Error(`Scryfall request failed with ${response.status}`);
+    return (await response.json()) as ScryfallSearchResponse;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return (await response.json()) as ScryfallCard;
 }
 
-async function fetchDistinctCards() {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const [firstCard, secondCard] = await Promise.all([
-      fetchRandomCard(),
-      fetchRandomCard()
-    ]);
+async function fetchCardPool() {
+  const cards: CardArtEntry[] = [];
+  let nextPageUrl: string | undefined = SCRYFALL_SEARCH_ENDPOINT;
 
-    if (firstCard.id !== secondCard.id) {
-      return [toCardArtEntry(firstCard), toCardArtEntry(secondCard)] as const;
-    }
+  for (let pageIndex = 0; pageIndex < MAX_POOL_PAGES && nextPageUrl; pageIndex += 1) {
+    const searchResponse = await fetchSearchPage(nextPageUrl);
+    cards.push(
+      ...searchResponse.data
+        .map(toCardArtEntry)
+        .filter((card) => card.artUrl && card.releasedAt)
+    );
+
+    nextPageUrl = searchResponse.has_more ? searchResponse.next_page : undefined;
   }
 
-  const [firstCard, secondCard] = await Promise.all([
-    fetchRandomCard(),
-    fetchRandomCard()
-  ]);
+  if (!cards.length) {
+    throw new Error("Scryfall returned no usable card art results.");
+  }
 
-  return [toCardArtEntry(firstCard), toCardArtEntry(secondCard)] as const;
+  return cards.slice(0, CARD_POOL_SIZE);
+}
+
+async function getCardPool() {
+  if (cachedCardPool) {
+    return cachedCardPool;
+  }
+
+  if (!cardPoolPromise) {
+    cardPoolPromise = fetchCardPool().finally(() => {
+      cardPoolPromise = null;
+    });
+  }
+
+  cachedCardPool = await cardPoolPromise;
+  return cachedCardPool;
+}
+
+function mergeRecentIds(nextIds: string[]) {
+  const merged = [...nextIds, ...recentCardIds].filter(
+    (id, index, values) => values.indexOf(id) === index
+  );
+
+  recentCardIds = merged.slice(0, RECENT_CARD_LIMIT);
+}
+
+function pickPairFromPool(pool: CardArtEntry[], excludeIds: Set<string>) {
+  const eligibleCards = pool.filter((card) => !excludeIds.has(card.id));
+
+  if (eligibleCards.length < 2) {
+    return null;
+  }
+
+  const firstCard = eligibleCards[Math.floor(Math.random() * eligibleCards.length)];
+  const remainingCards = eligibleCards.filter((card) => card.id !== firstCard.id);
+
+  if (!remainingCards.length) {
+    return null;
+  }
+
+  const secondCard = remainingCards[Math.floor(Math.random() * remainingCards.length)];
+
+  return [firstCard, secondCard] as const;
+}
+
+async function fetchDistinctCards(excludeIds: string[]) {
+  const excludeSet = new Set([...excludeIds, ...recentCardIds]);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const pool = await getCardPool();
+    const pair = pickPairFromPool(pool, excludeSet);
+
+    if (pair) {
+      mergeRecentIds([pair[0].id, pair[1].id]);
+      return pair;
+    }
+
+    cachedCardPool = null;
+  }
+
+  throw new Error("Unable to find two distinct live cards.");
 }
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const cards = await fetchDistinctCards();
+    const url = new URL(request.url);
+    const excludeIds = url.searchParams
+      .getAll("exclude")
+      .flatMap((value) => value.split(","))
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const cards = await fetchDistinctCards(excludeIds);
     return NextResponse.json({ cards });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load live cards.";

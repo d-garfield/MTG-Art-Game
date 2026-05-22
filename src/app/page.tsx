@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CardArtEntry } from "../data/cards";
 
 type RoundResult = {
@@ -23,9 +23,15 @@ function getOlderCard(leftCard: CardArtEntry, rightCard: CardArtEntry) {
   return leftCard.artYear <= rightCard.artYear ? leftCard : rightCard;
 }
 
+function sleep(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export default function Home() {
   const [leftCard, setLeftCard] = useState<CardArtEntry | null>(null);
   const [rightCard, setRightCard] = useState<CardArtEntry | null>(null);
+  const prefetchedCardsRef = useRef<CardArtEntry[] | null>(null);
+  const seenCardIdsRef = useRef<string[]>([]);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [round, setRound] = useState(1);
@@ -35,35 +41,69 @@ export default function Home() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
 
-  const fetchRoundCards = useCallback(async () => {
-    const response = await fetch("/api/round", { cache: "no-store" });
+  const fetchRoundCards = useCallback(async (excludeIds: string[] = []) => {
+    const maxAttempts = 3;
+    const query = new URLSearchParams();
 
-    if (!response.ok) {
-      throw new Error(`Round request failed with ${response.status}`);
+    excludeIds.forEach((id) => {
+      query.append("exclude", id);
+    });
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const response = await fetch(
+        query.toString() ? `/api/round?${query.toString()}` : "/api/round",
+        { cache: "no-store" }
+      );
+
+      if (response.ok) {
+        const payload = (await response.json()) as RoundPayload;
+        const [first, second] = payload.cards;
+
+        if (first && second) {
+          return [first, second] as const;
+        }
+      }
+
+      if (attempt < maxAttempts) {
+        await sleep(350 * attempt);
+        continue;
+      }
+
+      throw new Error(`Round request failed after ${maxAttempts} attempts.`);
     }
 
-    const payload = (await response.json()) as RoundPayload;
-    const [first, second] = payload.cards;
-
-    if (!first || !second) {
-      throw new Error("Round payload did not include two cards.");
-    }
-
-    return [first, second] as const;
+    throw new Error("Round request failed.");
   }, []);
+
+  const prefetchNextRound = useCallback(async () => {
+    if (prefetchedCardsRef.current) {
+      return;
+    }
+
+    try {
+      const cards = await fetchRoundCards(seenCardIdsRef.current);
+      prefetchedCardsRef.current = [...cards];
+    } catch {
+      prefetchedCardsRef.current = null;
+    }
+  }, [fetchRoundCards]);
 
   const loadRound = useCallback(async (advanceRound = false) => {
     setIsLoading(true);
     setLoadError(null);
 
     try {
-      const [first, second] = await fetchRoundCards();
+      const [first, second] = prefetchedCardsRef.current ?? (await fetchRoundCards());
 
       setLeftCard(first);
       setRightCard(second);
       setResult(null);
       setLocked(false);
       setRevealedCardId(null);
+      seenCardIdsRef.current = Array.from(
+        new Set([...seenCardIdsRef.current, first.id, second.id])
+      );
+      prefetchedCardsRef.current = null;
       if (advanceRound) {
         setRound((currentRound) => currentRound + 1);
       }
@@ -108,6 +148,8 @@ export default function Home() {
     });
     setScore((currentScore) => currentScore + (isCorrect ? 1 : 0));
     setStreak((currentStreak) => (isCorrect ? currentStreak + 1 : 0));
+
+    void prefetchNextRound();
   }
 
   return (
@@ -215,6 +257,14 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      <footer className="game-footer">
+        <div>
+          <p className="footer-brand">Oakwin</p>
+          <p className="footer-copy">Built for card-art guessing with live MTG data.</p>
+        </div>
+        <p className="footer-copy footer-copy-right">Powered by Scryfall</p>
+      </footer>
     </main>
   );
 }
