@@ -66,7 +66,7 @@ function toCardArtEntry(card: ScryfallCard): CardArtEntry {
     artist: card.artist ?? "Unknown",
     artUrl: getArtUrl(card),
     frame: "scryfall",
-    hint: "Live art pulled from Scryfall.",
+    hint: "",
     source: "scryfall"
   };
 }

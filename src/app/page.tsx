@@ -156,10 +156,10 @@ export default function Home() {
     <main className="app-shell">
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">Magic: The Gathering art history</p>
+          
           <h1>Pick the older card art</h1>
           <p className="hero-copy">
-            Pulling public data from MTG API.
+            Utilizes data from scryfall. Oldest printing of shown art will be used.
           </p>
         </div>
 
@@ -179,58 +179,80 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="battle-grid">
-        {isLoading ? (
-          <div className="loading-grid" aria-live="polite" aria-busy="true">
-            <span className="sr-only">Loading live card art.</span>
-            <div className="loading-card loading-card-left" />
-            <div className="loading-card loading-card-right" />
-          </div>
-        ) : loadError || !leftCard || !rightCard ? (
-          <div className="loading-card">
-            Could not load live cards. {loadError ? ` ${loadError}` : ""}
-          </div>
-        ) : (
-          <>
-            {cardPairs.map((card) => {
-              const isWinner = result?.winnerId === card.id;
-              const isLoser = result?.loserId === card.id;
-              const isRevealed = revealedCardId === card.id || locked;
+      <section className="battle-stage">
+        <div className="battle-grid">
+          {isLoading ? (
+            <div className="loading-grid" aria-live="polite" aria-busy="true">
+              <span className="sr-only">Loading live card art.</span>
+              <div className="loading-card loading-card-left" />
+              <div className="loading-card loading-card-right" />
+            </div>
+          ) : loadError || !leftCard || !rightCard ? (
+            <div className="loading-card">
+              Could not load live cards. {loadError ? ` ${loadError}` : ""}
+            </div>
+          ) : (
+            <>
+              {cardPairs.map((card) => {
+                const isWinner = result?.winnerId === card.id;
+                const isLoser = result?.loserId === card.id;
+                const isRevealed = revealedCardId === card.id || locked;
+                const resultLabel =
+                  locked && revealedCardId === card.id
+                    ? isWinner
+                      ? "Correct"
+                      : "Incorrect"
+                    : null;
 
-              return (
-                <button
-                  key={card.id}
-                  className={`card-panel frame-${card.frame} ${isWinner ? "winner" : ""} ${isLoser ? "loser" : ""} ${isRevealed ? "revealed" : ""}`}
-                  onClick={() => resolveChoice(card.id)}
-                  disabled={locked}
-                  type="button"
-                  aria-label={`Choose ${card.cardName}`}
-                >
-                  <span className="art-surface" aria-hidden="true">
-                    {card.artUrl ? (
-                      <Image
-                        className="art-image"
-                        src={card.artUrl}
-                        alt=""
-                        fill
-                        sizes="(max-width: 900px) 100vw, 50vw"
-                        priority
-                        unoptimized
-                      />
+                return (
+                  <button
+                    key={card.id}
+                    className={`card-panel frame-${card.frame} ${isWinner ? "winner" : ""} ${isLoser ? "loser" : ""} ${isRevealed ? "revealed" : ""}`}
+                    onClick={() => resolveChoice(card.id)}
+                    disabled={locked}
+                    type="button"
+                    aria-label={`Choose ${card.cardName}`}
+                  >
+                    <span className="art-surface" aria-hidden="true">
+                      {card.artUrl ? (
+                        <Image
+                          className="art-image"
+                          src={card.artUrl}
+                          alt=""
+                          fill
+                          sizes="(max-width: 900px) 100vw, 50vw"
+                          priority
+                          unoptimized
+                        />
+                      ) : null}
+                    </span>
+                    <div className={`card-overlay ${isRevealed ? "visible" : ""}`}>
+                      <p className="card-name">{card.cardName}</p>
+                      <p className="card-meta">{card.setName}</p>
+                      <p className="card-meta">Artist: {card.artist}</p>
+                      <p className="card-meta">Released: <span className="year-highlight">{formatYear(card.artYear)}</span></p>
+                      <p className="art-hint">{card.hint}</p>
+                    </div>
+                    {resultLabel ? (
+                      <span
+                        className={`card-result-badge ${isWinner ? "correct" : "incorrect"}`}
+                        aria-hidden="true"
+                      >
+                        {resultLabel}
+                      </span>
                     ) : null}
-                  </span>
-                  <div className={`card-overlay ${isRevealed ? "visible" : ""}`}>
-                    <p className="card-name">{card.cardName}</p>
-                    <p className="card-meta">{card.setName}</p>
-                    <p className="card-meta">Artist: {card.artist}</p>
-                    <p className="card-meta">Released: <span className="year-highlight">{formatYear(card.artYear)}</span></p>
-                    <p className="art-hint">{card.hint}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </>
-        )}
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </div>
+
+        {result ? (
+          <button className="next-button next-button-overlay" onClick={nextRound} type="button">
+            Next round
+          </button>
+        ) : null}
       </section>
 
       <section className="status-panel">
@@ -243,27 +265,65 @@ export default function Home() {
                 Older release year: {formatYear(olderCard?.artYear)}
               </p>
             </div>
-            <button className="next-button" onClick={nextRound} type="button">
-              Next round
-            </button>
           </>
         ) : (
           <div>
             <p className="status-title">Choose carefully</p>
             <p className="status-copy">
-              The older card art is the one with the earlier release year. Make
-              your pick to lock in points.
+              The older card art is the one with the earlier release year. 
             </p>
           </div>
         )}
-      </section>
+      </section> 
 
       <footer className="game-footer">
         <div>
           <p className="footer-brand">Oakwin</p>
           <p className="footer-copy">Built for card-art guessing with live MTG data.</p>
         </div>
-        <p className="footer-copy footer-copy-right">Powered by Scryfall</p>
+        <div className="footer-links" aria-label="Social links">
+          <a
+            className="footer-icon-link"
+            href="https://x.com/Oquinn_mb"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Follow on X"
+            title="Follow on X"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 4h4.5l5.1 6.8L18.9 4H22l-7.5 8.6L22 20h-4.5l-5.4-7.2L6.7 20H2l8-9.1L4 4zm1.9 1.2 10.7 14.3h1.6L7.5 5.2H5.9z" />
+            </svg>
+          </a>
+
+          <a
+            className="footer-icon-link"
+            href="mailto:bstguesser@gmail.com"
+            aria-label="Email bstguesser@gmail.com"
+            title="Email"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 5h16c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V7c0-1.1.9-2 2-2zm0 2v.3l8 5.2 8-5.2V7H4zm16 10V9.4l-7.4 4.8c-.3.2-.6.2-.9 0L4 9.4V17h16z" />
+            </svg>
+          </a>
+
+          <a
+            className="footer-icon-link"
+            href="https://buymeacoffee.com/oakwin"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Buy me a coffee"
+            title="Buy me a coffee"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M7 5h10v3h2.5A1.5 1.5 0 0 1 21 9.5V11a5 5 0 0 1-5 5h-1.3A5.2 5.2 0 0 1 10 19H8.5A3.5 3.5 0 0 1 5 15.5V11h2V5zm10 5h2v1a3 3 0 0 1-3 3h-.8c.2-.7.3-1.5.3-2.3V10zM7 7v8.5c0 .8.7 1.5 1.5 1.5H10c1.9 0 3.5-1.6 3.5-3.5V7H7z" />
+            </svg>
+          </a>
+        </div>
+        <div className="footer-meta">
+          <p className="footer-copy footer-copy-right">Privacy Policy</p>
+          <p className="footer-copy footer-copy-right">Terms of Service</p>
+          <p className="footer-copy footer-copy-right">Powered by Scryfall</p>
+        </div>
       </footer>
     </main>
   );
