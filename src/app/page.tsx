@@ -27,6 +27,10 @@ function sleep(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export default function Home() {
   const [leftCard, setLeftCard] = useState<CardArtEntry | null>(null);
   const [rightCard, setRightCard] = useState<CardArtEntry | null>(null);
@@ -40,6 +44,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
+  const [artistGuess, setArtistGuess] = useState("");
+  const [artistGuessFeedback, setArtistGuessFeedback] = useState<string | null>(null);
+  const [artistGuessChecked, setArtistGuessChecked] = useState(false);
 
   const fetchRoundCards = useCallback(async (excludeIds: string[] = []) => {
     const maxAttempts = 3;
@@ -100,6 +107,9 @@ export default function Home() {
       setResult(null);
       setLocked(false);
       setRevealedCardId(null);
+      setArtistGuess("");
+      setArtistGuessFeedback(null);
+      setArtistGuessChecked(false);
       seenCardIdsRef.current = Array.from(
         new Set([...seenCardIdsRef.current, first.id, second.id])
       );
@@ -125,6 +135,29 @@ export default function Home() {
 
   function nextRound() {
     void loadRound(true);
+  }
+
+  function checkArtistGuess() {
+    if (!olderCard || revealedCardId !== olderCard.id) {
+      return;
+    }
+
+    const guessedArtist = normalizeText(artistGuess);
+    const actualArtist = normalizeText(olderCard.artist);
+
+    setArtistGuessChecked(true);
+
+    if (!guessedArtist) {
+      setArtistGuessFeedback("Enter an artist name to check for a super correct.");
+      return;
+    }
+
+    if (guessedArtist === actualArtist) {
+      setArtistGuessFeedback(`Super Correct. ${olderCard.artist} is the artist.`);
+      return;
+    }
+
+    setArtistGuessFeedback(`Not quite. The artist was ${olderCard.artist}.`);
   }
 
   function resolveChoice(selectedId: string) {
@@ -232,6 +265,42 @@ export default function Home() {
                       <p className="card-meta">Artist: {card.artist}</p>
                       <p className="card-meta">Released: <span className="year-highlight">{formatYear(card.artYear)}</span></p>
                       <p className="art-hint">{card.hint}</p>
+                      {result && isWinner ? (
+                        <div className="artist-check artist-check-overlay">
+                          <label className="artist-check-label" htmlFor={`artist-guess-${card.id}`}>
+                            Optional artist guess for a super correct
+                          </label>
+                          <div className="artist-check-row">
+                            <input
+                              id={`artist-guess-${card.id}`}
+                              className="artist-check-input"
+                              type="text"
+                              value={artistGuess}
+                              onChange={(event) => {
+                                setArtistGuess(event.target.value);
+                                setArtistGuessChecked(false);
+                                setArtistGuessFeedback(null);
+                              }}
+                              placeholder="Guess the artist"
+                              autoComplete="off"
+                            />
+                            <button className="artist-check-button" onClick={checkArtistGuess} type="button">
+                              Check
+                            </button>
+                          </div>
+                          {artistGuessChecked && artistGuessFeedback ? (
+                            <p className={`artist-check-feedback ${
+                              artistGuessFeedback.startsWith("Super Correct")
+                                ? "correct"
+                                : artistGuessFeedback.startsWith("Not quite")
+                                  ? "incorrect"
+                                  : "neutral"
+                            }`}>
+                              {artistGuessFeedback}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                     {resultLabel ? (
                       <span
