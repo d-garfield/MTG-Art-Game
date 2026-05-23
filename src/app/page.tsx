@@ -189,7 +189,7 @@ export default function Home() {
     <main className="app-shell">
       <section className="hero-panel">
         <div>
-          
+          <p className="eyebrow">BETA BUILD</p>
           <h1>Pick the older card art</h1>
           <p className="hero-copy">
             Utilizes data from scryfall. Oldest printing of shown art will be used.
@@ -284,9 +284,7 @@ export default function Home() {
                               placeholder="Guess the artist"
                               autoComplete="off"
                             />
-                            <button className="artist-check-button" onClick={checkArtistGuess} type="button">
-                              Check
-                            </button>
+                            
                           </div>
                           {artistGuessChecked && artistGuessFeedback ? (
                             <p className={`artist-check-feedback ${
